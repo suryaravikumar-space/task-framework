@@ -1,5 +1,4 @@
 {
   "name": "Course 1",
-  "postAttachCommand": "code tests/hover/hover.spec.ts",
-  "postAttachCommand": "npx playwright install --with-deps chromium firefox webkit"
+  "postAttachCommand": "code tests/hover/hover.spec.ts && npx playwright install --with-deps chromium firefox webkit"
 }
