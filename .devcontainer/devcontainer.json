@@ -1,4 +1,10 @@
 {
   "name": "Course 1",
-  "postAttachCommand": "code tests/hover/hover.spec.ts && npx playwright install --with-deps chromium firefox webkit"
+  "postAttachCommand": "code tests/hover/hover.spec.ts && npx playwright install --with-deps chromium firefox webkit",
+   "containerEnv": {
+    "APP_RESULT_ENDPOINT": "http://localhost:3000/api/results",
+    "APP_RESULT_TOKEN": "super-secret-token",
+    "GITHUB_USER": "${localEnv:USER}",   // Or override manually
+    "COURSE_ID": "course-1"
+  }
 }
