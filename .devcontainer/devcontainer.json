@@ -4,7 +4,6 @@
    "containerEnv": {
     "APP_RESULT_ENDPOINT": "http://localhost:3000/api/results",
     "APP_RESULT_TOKEN": "Xq3K9mP2vN8rT5wY7uZ1aB4cD6eF0gH8iJ2kL4mN6oP8",
-    "GITHUB_USER": "${localEnv:USER}",   // Or override manually
-    "COURSE_ID": "course-1"
+    "GITHUB_USER": "${localEnv:USER}"  // Or override manually
   }
 }
