@@ -1,9 +1,44 @@
+// .devcontainer/devcontainer.json
 {
-  "name": "Course 1",
-  "postAttachCommand": "code tests/hover/hover.spec.ts && npx playwright install --with-deps chromium firefox webkit",
-   "containerEnv": {
-    "APP_RESULT_ENDPOINT": "http://localhost:3000/api/results",
-    "APP_RESULT_TOKEN": "Xq3K9mP2vN8rT5wY7uZ1aB4cD6eF0gH8iJ2kL4mN6oP8",
-    "GITHUB_USER": "${localEnv:USER}"  // Or override manually
+  "name": "Automation Playground",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:18",
+  
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  
+  "postCreateCommand": "npm install && npx playwright install --with-deps chromium firefox webkit",
+  
+  "postAttachCommand": "bash .devcontainer/load-context.sh",
+  
+  "containerEnv": {
+    "APP_RESULT_ENDPOINT": "${localEnv:APP_RESULT_ENDPOINT:http://localhost:3000/api/results}",
+    "APP_RESULT_TOKEN": "${localEnv:APP_RESULT_TOKEN:Xq3K9mP2vN8rT5wY7uZ1aB4cD6eF0gH8iJ2kL4mN6oP8}",
+    "GITHUB_USER": "${localEnv:GITHUB_USER:${localEnv:USER}}",
+    "APP_COURSE_TYPE": "${localEnv:APP_COURSE_TYPE:salesforce-automation}",
+    "APP_WEEK": "${localEnv:APP_WEEK:1}",
+    "APP_DAY": "${localEnv:APP_DAY:1}",
+    "APP_EXERCISE_ID": "${localEnv:APP_EXERCISE_ID:playground-generic}",
+    "APP_EXERCISE_TITLE": "${localEnv:APP_EXERCISE_TITLE:Generic Exercise}",
+    "APP_TEST_COMMAND": "${localEnv:APP_TEST_COMMAND:npx playwright test}",
+    "APP_REQUIRED_SUITES": "${localEnv:APP_REQUIRED_SUITES:[]}"
+  },
+  
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-playwright.playwright"
+      ]
+    }
   }
 }
+
+// {
+//   "name": "Course 1",
+//   "postAttachCommand": "code tests/hover/hover.spec.ts && npx playwright install --with-deps chromium firefox webkit",
+//    "containerEnv": {
+//     "APP_RESULT_ENDPOINT": "http://localhost:3000/api/results",
+//     "APP_RESULT_TOKEN": "Xq3K9mP2vN8rT5wY7uZ1aB4cD6eF0gH8iJ2kL4mN6oP8",
+//     "GITHUB_USER": "${localEnv:USER}"  // Or override manually
+//   }
+// }
