@@ -10,7 +10,6 @@ async function fetchContext() {
   const githubUser = process.env.GITHUB_USER || "unknown";
   
   if (!apiEndpoint) {
-    console.log("⚠️  APP_RESULT_ENDPOINT not set, using environment variables");
     return null;
   }
   
@@ -22,7 +21,6 @@ async function fetchContext() {
     
     const res = await fetch(contextUrl, { timeout: 5000 });
     if (!res.ok) {
-      console.log("⚠️  Could not fetch context, using environment variables");
       return null;
     }
     
@@ -38,28 +36,6 @@ async function fetchContext() {
   return null;
 }
 
-// Load from .env.exercise if it exists
-function loadEnvFile() {
-  const envVars = {};
-  const envPath = path.join(__dirname, "..", ".env.exercise");
-  
-  if (fs.existsSync(envPath)) {
-    const envContent = fs.readFileSync(envPath, "utf8");
-    envContent.split("\n").forEach(line => {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith("#")) {
-        const [key, ...valueParts] = trimmed.split("=");
-        if (key && valueParts.length > 0) {
-          envVars[key.trim()] = valueParts.join("=").trim();
-        }
-      }
-    });
-  }
-  
-  return envVars;
-}
-
-// Helper to get env var
 function getEnv(key, defaultValue = "") {
   return process.env[key] || defaultValue;
 }
@@ -73,16 +49,74 @@ function parseRequiredSuites(envValue) {
   return envValue.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
+// Function to read code files based on exercise configuration
+function readCodeFiles(targetFilePath) {
+  const codeFiles = [];
+  
+  if (!targetFilePath) {
+    console.log("⚠️  No target file path specified, skipping code submission");
+    return codeFiles;
+  }
+
+  console.log("📂 Target file path:", targetFilePath);
+
+  // Support both single file and array of files
+  const filePaths = Array.isArray(targetFilePath) ? targetFilePath : [targetFilePath];
+  
+  for (let filePath of filePaths) {
+    // Clean up the path - remove leading slash or workspaces prefix
+    filePath = filePath.replace(/^\/workspaces\/task-framework\//, '');
+    filePath = filePath.replace(/^workspaces\/task-framework\//, '');
+    
+    const fullPath = path.join(__dirname, "..", filePath);
+    
+    console.log(`  Looking for: ${fullPath}`);
+    
+    if (fs.existsSync(fullPath)) {
+      const content = fs.readFileSync(fullPath, "utf8");
+      const fileName = path.basename(fullPath);
+      const ext = path.extname(fullPath).slice(1);
+      
+      // Determine language from extension
+      const languageMap = {
+        'ts': 'typescript',
+        'js': 'javascript',
+        'tsx': 'typescript',
+        'jsx': 'javascript',
+        'py': 'python',
+        'java': 'java',
+        'cpp': 'cpp',
+        'c': 'c',
+      };
+      
+      const language = languageMap[ext] || ext;
+      
+      codeFiles.push({
+        filePath: filePath,
+        fileName: fileName,
+        content: content,
+        language: language,
+      });
+      
+      console.log(`  ✅ Read code file: ${fileName} (${content.length} bytes)`);
+    } else {
+      console.log(`  ❌ File not found: ${fullPath}`);
+    }
+  }
+  
+  return codeFiles;
+}
+
+
 async function main() {
   const reportPath = path.join(__dirname, "..", "test-report.json");
 
   // Try to fetch fresh context from API first
   const freshContext = await fetchContext();
   
-  let courseType, weekNumber, dayNumber, exerciseId, exerciseTitle, testCommand, requiredSuites;
+  let courseType, weekNumber, dayNumber, exerciseId, exerciseTitle, testCommand, requiredSuites, targetFilePath;
   
   if (freshContext) {
-    // Use fresh context from API
     courseType = freshContext.courseType;
     weekNumber = freshContext.weekNumber;
     dayNumber = freshContext.dayNumber;
@@ -90,8 +124,8 @@ async function main() {
     exerciseTitle = freshContext.exerciseTitle;
     testCommand = freshContext.testCommand;
     requiredSuites = freshContext.requiredSuites || [];
+    targetFilePath = freshContext.targetFilePath;
   } else {
-    // Fall back to environment variables
     courseType = getEnv("APP_COURSE_TYPE", "salesforce-automation");
     weekNumber = Number(getEnv("APP_WEEK", "1"));
     dayNumber = Number(getEnv("APP_DAY", "1"));
@@ -99,6 +133,14 @@ async function main() {
     exerciseTitle = getEnv("APP_EXERCISE_TITLE", "Exercise");
     testCommand = getEnv("APP_TEST_COMMAND", "npx playwright test");
     requiredSuites = parseRequiredSuites(getEnv("APP_REQUIRED_SUITES"));
+    targetFilePath = getEnv("APP_TARGET_FILE_PATH");
+  }
+
+  // 🔹 IMPORTANT: Check for manual override even if we have fresh context
+  const manualTargetPath = getEnv("APP_TARGET_FILE_PATH");
+  if (manualTargetPath) {
+    console.log("🔧 Using manual target file path from environment");
+    targetFilePath = manualTargetPath;
   }
 
   const githubUser = getEnv("GITHUB_USER", "unknown");
@@ -109,6 +151,11 @@ async function main() {
   console.log(`   Course: ${courseType}`);
   console.log(`   Week ${weekNumber}, Day ${dayNumber}`);
   console.log(`   Exercise: ${exerciseId} - ${exerciseTitle}`);
+  if (targetFilePath) {
+    console.log(`   Target File: ${targetFilePath}`);
+  } else {
+    console.log(`   Target File: Not specified`);
+  }
   console.log("");
 
   console.log("🧪 Test command already completed by npm script");
@@ -120,6 +167,17 @@ async function main() {
   }
 
   const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+
+  // Read code files for submission
+  const codeFiles = readCodeFiles(targetFilePath);
+  
+  if (codeFiles.length > 0) {
+    console.log(`✅ Collected ${codeFiles.length} code file(s) for submission`);
+    console.log("");
+  } else {
+    console.log("ℹ️  No code files to submit");
+    console.log("");
+  }
 
   const apiUrl = getEnv("APP_RESULT_ENDPOINT");
   const apiToken = getEnv("APP_RESULT_TOKEN");
@@ -141,6 +199,7 @@ async function main() {
     testCommand,
     requiredSuites,
     report,
+    codeFiles,
   };
 
   try {
@@ -159,17 +218,27 @@ async function main() {
       process.exit(1);
     }
 
-    const result = await res.json();
-    console.log("✅ Results submitted successfully!");
-    console.log(`   Status: ${result.status}`);
-    console.log(`   ID: ${result.id}`);
-    console.log(`   Course: ${courseType}, Week ${weekNumber}, Day ${dayNumber}, Exercise: ${exerciseId}`);
     
-    if (result.status === 'passed') {
-      console.log("🎉 All tests passed!");
-    } else {
-      console.log("⚠️  Some tests failed. Check the report for details.");
-    }
+const result = await res.json();
+console.log("✅ Results submitted successfully!");
+console.log(`   Status: ${result.status}`);
+console.log(`   ID: ${result.id}`);
+console.log(`   Course: ${courseType}, Week ${weekNumber}, Day ${dayNumber}, Exercise: ${exerciseId}`);
+
+if (codeFiles.length > 0) {
+  console.log(`   Code files submitted: ${codeFiles.length}`);
+  console.log("   ⏳ Code will be validated by automated service");
+}
+
+// Remove the codeValidation display section since it won't be immediate
+
+if (result.status === 'passed') {
+  console.log("");
+  console.log("🎉 All tests passed!");
+} else {
+  console.log("");
+  console.log("⚠️  Some tests failed. Check the report for details.");
+}
   } catch (err) {
     console.error("❌ Network error:", err.message);
     process.exit(1);
@@ -180,6 +249,190 @@ main().catch((err) => {
   console.error("❌ Unexpected error:", err);
   process.exit(1);
 });
+
+
+// // scripts/run-and-submit.js
+// const { execSync } = require("child_process");
+// const fs = require("fs");
+// const path = require("path");
+// const fetch = require("node-fetch");
+
+// // Fetch context from API
+// async function fetchContext() {
+//   const apiEndpoint = process.env.APP_RESULT_ENDPOINT;
+//   const githubUser = process.env.GITHUB_USER || "unknown";
+  
+//   if (!apiEndpoint) {
+//     console.log("⚠️  APP_RESULT_ENDPOINT not set, using environment variables");
+//     return null;
+//   }
+  
+//   try {
+//     const baseUrl = apiEndpoint.replace(/\/api\/results$/, '');
+//     const contextUrl = `${baseUrl}/api/codespaces/context?githubUsername=${githubUser}`;
+    
+//     console.log("📡 Fetching fresh context from:", contextUrl);
+    
+//     const res = await fetch(contextUrl, { timeout: 5000 });
+//     if (!res.ok) {
+//       console.log("⚠️  Could not fetch context, using environment variables");
+//       return null;
+//     }
+    
+//     const data = await res.json();
+//     if (data.context) {
+//       console.log("✅ Fresh context loaded from API");
+//       return data.context;
+//     }
+//   } catch (error) {
+//     console.log("⚠️  Error fetching context:", error.message);
+//   }
+  
+//   return null;
+// }
+
+// // Load from .env.exercise if it exists
+// function loadEnvFile() {
+//   const envVars = {};
+//   const envPath = path.join(__dirname, "..", ".env.exercise");
+  
+//   if (fs.existsSync(envPath)) {
+//     const envContent = fs.readFileSync(envPath, "utf8");
+//     envContent.split("\n").forEach(line => {
+//       const trimmed = line.trim();
+//       if (trimmed && !trimmed.startsWith("#")) {
+//         const [key, ...valueParts] = trimmed.split("=");
+//         if (key && valueParts.length > 0) {
+//           envVars[key.trim()] = valueParts.join("=").trim();
+//         }
+//       }
+//     });
+//   }
+  
+//   return envVars;
+// }
+
+// // Helper to get env var
+// function getEnv(key, defaultValue = "") {
+//   return process.env[key] || defaultValue;
+// }
+
+// function parseRequiredSuites(envValue) {
+//   if (!envValue) return [];
+//   try {
+//     const parsed = JSON.parse(envValue);
+//     if (Array.isArray(parsed)) return parsed;
+//   } catch (_) {}
+//   return envValue.split(",").map((s) => s.trim()).filter(Boolean);
+// }
+
+// async function main() {
+//   const reportPath = path.join(__dirname, "..", "test-report.json");
+
+//   // Try to fetch fresh context from API first
+//   const freshContext = await fetchContext();
+  
+//   let courseType, weekNumber, dayNumber, exerciseId, exerciseTitle, testCommand, requiredSuites;
+  
+//   if (freshContext) {
+//     // Use fresh context from API
+//     courseType = freshContext.courseType;
+//     weekNumber = freshContext.weekNumber;
+//     dayNumber = freshContext.dayNumber;
+//     exerciseId = freshContext.exerciseId;
+//     exerciseTitle = freshContext.exerciseTitle;
+//     testCommand = freshContext.testCommand;
+//     requiredSuites = freshContext.requiredSuites || [];
+//   } else {
+//     // Fall back to environment variables
+//     courseType = getEnv("APP_COURSE_TYPE", "salesforce-automation");
+//     weekNumber = Number(getEnv("APP_WEEK", "1"));
+//     dayNumber = Number(getEnv("APP_DAY", "1"));
+//     exerciseId = getEnv("APP_EXERCISE_ID", "playground-generic");
+//     exerciseTitle = getEnv("APP_EXERCISE_TITLE", "Exercise");
+//     testCommand = getEnv("APP_TEST_COMMAND", "npx playwright test");
+//     requiredSuites = parseRequiredSuites(getEnv("APP_REQUIRED_SUITES"));
+//   }
+
+//   const githubUser = getEnv("GITHUB_USER", "unknown");
+
+//   console.log("");
+//   console.log("📋 Exercise Context:");
+//   console.log(`   User: ${githubUser}`);
+//   console.log(`   Course: ${courseType}`);
+//   console.log(`   Week ${weekNumber}, Day ${dayNumber}`);
+//   console.log(`   Exercise: ${exerciseId} - ${exerciseTitle}`);
+//   console.log("");
+
+//   console.log("🧪 Test command already completed by npm script");
+//   console.log("");
+
+//   if (!fs.existsSync(reportPath)) {
+//     console.error("❌ Report file not found at", reportPath);
+//     process.exit(1);
+//   }
+
+//   const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+
+//   const apiUrl = getEnv("APP_RESULT_ENDPOINT");
+//   const apiToken = getEnv("APP_RESULT_TOKEN");
+
+//   if (!apiUrl || !apiToken) {
+//     console.error("❌ APP_RESULT_ENDPOINT or APP_RESULT_TOKEN missing");
+//     process.exit(1);
+//   }
+
+//   console.log("📤 Submitting results to", apiUrl);
+
+//   const payload = {
+//     githubUser,
+//     courseType,
+//     weekNumber,
+//     dayNumber,
+//     exerciseId,
+//     exerciseTitle,
+//     testCommand,
+//     requiredSuites,
+//     report,
+//   };
+
+//   try {
+//     const res = await fetch(apiUrl, {
+//       method: "POST",
+//       headers: {
+//         "Content-Type": "application/json",
+//         "x-app-token": apiToken,
+//       },
+//       body: JSON.stringify(payload),
+//     });
+
+//     if (!res.ok) {
+//       const errorText = await res.text();
+//       console.error("❌ Failed to submit results:", errorText);
+//       process.exit(1);
+//     }
+
+//     const result = await res.json();
+//     console.log("✅ Results submitted successfully!");
+//     console.log(`   Status: ${result.status}`);
+//     console.log(`   ID: ${result.id}`);
+//     console.log(`   Course: ${courseType}, Week ${weekNumber}, Day ${dayNumber}, Exercise: ${exerciseId}`);
+    
+//     if (result.status === 'passed') {
+//       console.log("🎉 All tests passed!");
+//     } else {
+//       console.log("⚠️  Some tests failed. Check the report for details.");
+//     }
+//   } catch (err) {
+//     console.error("❌ Network error:", err.message);
+//     process.exit(1);
+//   }
+// }
+
+// main().catch((err) => {
+//   console.error("❌ Unexpected error:", err);
+//   process.exit(1);
+// });
 
 // // scripts/run-and-submit.js
 // require('dotenv').config({ path: '.env.exercise' }); // Load exercise-specific env
